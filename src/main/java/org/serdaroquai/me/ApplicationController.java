@@ -2,6 +2,7 @@ package org.serdaroquai.me;
 
 import java.security.Principal;
 import java.util.concurrent.BlockingQueue;
+import java.util.stream.Stream;
 
 import javax.annotation.PostConstruct;
 
@@ -38,14 +39,7 @@ public class ApplicationController {
     }
     
     public void dispatch(GameState state) {
-//    	//send public state update
-//		template.convertAndSend("/topic/public", gameState.toMessage());
-//
-//		//send private messages
-//		for (Player player : gameState.getPlayers().values()) {
-//			String name = player.getPlayerName();
-//			template.convertAndSendToUser(name, "/queue/private", gameState.toPrivateMessage(name));					
-//		}
+		template.convertAndSendToUser(state.players.get(0), "/queue/private", state);					
     }
 	
 }
