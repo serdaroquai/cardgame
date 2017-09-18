@@ -3,6 +3,7 @@ $('#stage').append(app.view);
 $('body').on('contextmenu', '#stage', (e) => false);
 app.stop();
 const log = console.log;
+const animationSpeed = 0.3;
 
 
 // connect to server
@@ -26,8 +27,19 @@ const sendToServer = ((endpoint, subscribeAdress, publishAddress, connectCallbac
 		
 		// load game assets
 		app.loader.add("sprites.json").load(() => {
+			
+			//set up animation ticker
+			app.ticker.add(delta => {
+				app.stage.children.forEach(sprite => {
+					if (typeof sprite.tick === 'function') {
+						sprite.tick(delta, animationSpeed);
+					};
+				});
+			});
+			
 			// start the app
 			app.start();
+			
 			// send the registery Message
 			sendToServer({type:'REGISTER'});
 		});
@@ -48,6 +60,31 @@ const makeCard = (id, texture, parent, x, y) => {
 			y);
 	
 	card.anchor.set(0.5);
+
+	card.update = (newState) => {
+		const target = newState.cards.find((x) => {this.id === x.id}, card);
+		if (target) {
+			const {x, y} = target;
+			card.target = new PIXI.Point(x,y);
+		}
+	};
+	
+	card.tick = (delta,animationSpeed) => {
+		if (card.target && !card.dragging) {
+			const {x, y} = card;
+			const {x: tx,y: ty} = card.target;
+			
+			//TODO neatify this,
+			
+			card.x += (tx - x) * animationSpeed * delta;
+			card.y += (ty - y) * animationSpeed * delta;
+			
+			if (Math.abs(card.x - tx) < 1 && Math.abs(card.y - ty)) {
+				card.position = card.target;
+				delete card.target;
+			}
+		}
+	}
 	
 	card.onDragStart = (event) => {
 
@@ -79,19 +116,14 @@ const makeCard = (id, texture, parent, x, y) => {
 		if (card.dragging) {
 			card.dragging = false;
 			
-			var message = {
-	        		'type':'MOVE',
-	        		'id':card.id,
-//	        		'xInitial': card.xInitial,
-//	        		'yInitial': card.yInitial,
-	        		'x':card.x, 
-	        		'y':card.y
-	        }
-	        
-	        // send server wtf is going on
-	        sendToServer(message);
+			const {x, y, id} = card;
+			card.target = new PIXI.Point(x,y);
+			
+	        // notify server
+	        sendToServer({'type':'MOVE',id,x,y});
 			
 //			card.displayGroup = defaultLayer;
+
 			card.x = card.xInitial;
 			card.y = card.yInitial;
 			card.alpha = 1;
@@ -128,8 +160,9 @@ const makeDraggable = (target) => {
 		.on('pointermove', target.onDragMove);	
 }
 
+
 const updateGame= (() => {
-	
+
 	// last state (by using a closure we make sure updateGame is the only method that has access to state
 	const currentState = 
 		{
@@ -165,6 +198,15 @@ const updateGame= (() => {
 		
 		// finally update new State
 		currentState.cards = newState.cards;
+
+
+		
+		// notify components
+		app.stage.children.forEach((sprite) => {
+			if (typeof sprite.update === 'function') {
+				sprite.update(newState);
+			};
+		});
 		
 		log(currentState);
 	};
