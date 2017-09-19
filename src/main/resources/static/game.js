@@ -51,7 +51,7 @@ const sendToServer = ((endpoint, subscribeAdress, publishAddress, connectCallbac
 
 
 const makeCard = (id, texture, parent, x, y) => { 
-	log(PIXI.utils.TextureCache[texture]);
+	
 	const card = makeGameObject(
 			id, 
 			texture ? PIXI.utils.TextureCache[texture] : null,
@@ -61,10 +61,10 @@ const makeCard = (id, texture, parent, x, y) => {
 	
 	card.anchor.set(0.5);
 
-	card.update = (newState) => {
-		const target = newState.cards.find((x) => {this.id === x.id}, card);
+	card.update = (newState, me) => {
+		const target = newState.cards.find(x => me.id === x.sprite.id);
 		if (target) {
-			const {x, y} = target;
+			const {x, y} = target.sprite;
 			card.target = new PIXI.Point(x,y);
 		}
 	};
@@ -124,8 +124,8 @@ const makeCard = (id, texture, parent, x, y) => {
 			
 //			card.displayGroup = defaultLayer;
 
-			card.x = card.xInitial;
-			card.y = card.yInitial;
+//			card.x = card.xInitial;
+//			card.y = card.yInitial;
 			card.alpha = 1;
 			card.scale.x /= 1.1;
 	        card.scale.y /= 1.1;
@@ -169,24 +169,22 @@ const updateGame= (() => {
 			"cards":[]
 		};
 	
-	const toId = (card) => card.id;
+	const toId = (card) => card.sprite.id;
 	const findMissingCards = (newCards, oldCards) => {
-		return newCards.filter(card => oldCards.map(toId).indexOf(card.id) === -1);
+		return newCards.filter(card => oldCards.map(toId).indexOf(card.sprite.id) === -1);
 	};
 	const findExistingCards = (newCards, oldCards) => {
-		return newCards.filter(card => oldCards.map(toId).indexOf(card.id) !== -1);
+		return newCards.filter(card => oldCards.map(toId).indexOf(card.sprite.id) !== -1);
 	}
 	
 	const cards = (latestCards = []) => {
 
 		const missingCards = findMissingCards(latestCards, currentState.cards)
 			.map((card) => { 
-				const { id, texture, x, y } = card;
+				const { id, texture, x, y } = card.sprite;
 				return makeCard(id, texture, app.stage, x, y);
 			});
-		
 		const existingCards = findExistingCards(latestCards, currentState.cards);
-
 	};
 	
 	return (message) => {
@@ -198,13 +196,11 @@ const updateGame= (() => {
 		
 		// finally update new State
 		currentState.cards = newState.cards;
-
-
 		
 		// notify components
 		app.stage.children.forEach((sprite) => {
 			if (typeof sprite.update === 'function') {
-				sprite.update(newState);
+				sprite.update(newState, sprite); // have to pass the sprite since can't pass this scope to Array.find(..,thisArg) 
 			};
 		});
 		
