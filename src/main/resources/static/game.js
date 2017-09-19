@@ -1,9 +1,16 @@
-const app = new PIXI.Application(800, 600, {backgroundColor : 0x119911});
+const app = new PIXI.Application(800, 600, /*{backgroundColor : 0x119911}*/);
 $('#stage').append(app.view);
 $('body').on('contextmenu', '#stage', (e) => false);
 app.stop();
 const log = console.log;
 const animationSpeed = 0.3;
+const table = new PIXI.Container();
+const playerArea = new PIXI.Container();
+
+// drag is the top most layer
+const dragLayer = new PIXI.DisplayGroup(3, false);
+const defaultLayer = new PIXI.DisplayGroup(2, (sprite) => sprite.zOrder = -sprite.y);
+const bgLayer = new PIXI.DisplayGroup(1, false);
 
 
 // connect to server
@@ -26,11 +33,37 @@ const sendToServer = ((endpoint, subscribeAdress, publishAddress, connectCallbac
 	() => {
 		
 		// load game assets
-		app.loader.add("sprites.json").load(() => {
+		app.loader
+			.add("bkg.jpg", "bkg.jpg")
+			.add("dashboard.jpg", "dashboard.jpg")
+			.add("deckBig.png", "deckBig.png")
+			.add("sprites.json").load(() => {
+			
+			// init display group
+			app.stage.displayList = new PIXI.DisplayList();
+			
+			// setup stage
+			const tableBg = new PIXI.Sprite(PIXI.utils.TextureCache["bkg.jpg"]);
+			tableBg.width = app.renderer.width;
+			tableBg.height = app.renderer.height;
+			tableBg.displayGroup = bgLayer;
+			
+			const playerBg = new PIXI.Sprite(PIXI.utils.TextureCache["dashboard.jpg"]);
+			playerBg.width = app.renderer.width;
+			playerBg.height = 100;
+			playerBg.y = app.renderer.height - 100;
+			playerBg.alpha = 0.9;
+			playerBg.displayGroup = bgLayer;
+			
+			table.addChild(tableBg);
+			playerArea.addChild(playerBg);
+			
+			app.stage.addChild(table);
+			app.stage.addChild(playerArea);
 			
 			//set up animation ticker
 			app.ticker.add(delta => {
-				app.stage.children.forEach(sprite => {
+				table.children.forEach(sprite => {
 					if (typeof sprite.tick === 'function') {
 						sprite.tick(delta, animationSpeed);
 					};
@@ -40,6 +73,8 @@ const sendToServer = ((endpoint, subscribeAdress, publishAddress, connectCallbac
 			// start the app
 			app.start();
 			
+			console.log(table.width, table.height, table.x, table.y);
+			
 			// send the registery Message
 			sendToServer({type:'REGISTER'});
 		});
@@ -48,7 +83,6 @@ const sendToServer = ((endpoint, subscribeAdress, publishAddress, connectCallbac
 	(msg) => {
 		updateGame(msg);
 	}); 
-
 
 const makeCard = (id, texture, parent, x, y) => { 
 	
@@ -60,6 +94,7 @@ const makeCard = (id, texture, parent, x, y) => {
 			y);
 	
 	card.anchor.set(0.5);
+	card.displayGroup = defaultLayer;
 
 	card.update = (newState, me) => {
 		const target = newState.cards.find(x => me.id === x.sprite.id);
@@ -79,7 +114,7 @@ const makeCard = (id, texture, parent, x, y) => {
 			card.x += (tx - x) * animationSpeed * delta;
 			card.y += (ty - y) * animationSpeed * delta;
 			
-			if (Math.abs(card.x - tx) < 1 && Math.abs(card.y - ty)) {
+			if (Math.abs(card.x - tx) < 1 && Math.abs(card.y - ty) < 1) {
 				card.position = card.target;
 				delete card.target;
 			}
@@ -91,7 +126,7 @@ const makeCard = (id, texture, parent, x, y) => {
 		if (!card.dragging) {
 			card.data = event.data;
 			card.dragging = true;
-//			card.displayGroup = dragLayer;
+			card.displayGroup = dragLayer;
 			
 			card.alpha = 0.5;
 			card.scale.x *= 1.1;
@@ -122,7 +157,7 @@ const makeCard = (id, texture, parent, x, y) => {
 	        // notify server
 	        sendToServer({'type':'MOVE',id,x,y});
 			
-//			card.displayGroup = defaultLayer;
+			card.displayGroup = defaultLayer;
 
 //			card.x = card.xInitial;
 //			card.y = card.yInitial;
@@ -182,7 +217,7 @@ const updateGame= (() => {
 		const missingCards = findMissingCards(latestCards, currentState.cards)
 			.map((card) => { 
 				const { id, texture, x, y } = card.sprite;
-				return makeCard(id, texture, app.stage, x, y);
+				return makeCard(id, texture, table, x, y);
 			});
 		const existingCards = findExistingCards(latestCards, currentState.cards);
 	};
@@ -198,7 +233,7 @@ const updateGame= (() => {
 		currentState.cards = newState.cards;
 		
 		// notify components
-		app.stage.children.forEach((sprite) => {
+		table.children.forEach((sprite) => {
 			if (typeof sprite.update === 'function') {
 				sprite.update(newState, sprite); // have to pass the sprite since can't pass this scope to Array.find(..,thisArg) 
 			};
